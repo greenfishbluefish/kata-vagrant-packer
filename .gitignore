@@ -13,6 +13,11 @@
 # Ruby's simplecov) for the results of a code coverage analysis.
 coverage
 
+# The packer script creates a .box file in order to run the ServerSpec test
+# suite. This file should not be checked into the Git repository, therefore it
+# is listed here.
+*.box
+
 # Many naive .gitignore files which have Ruby dependencies will also ignore this
 # file. In general, you *want* to have this file so that every time a developer
 # does "bundle install", everyone will install the exact same version of every

@@ -9,6 +9,11 @@ set :backend, :ssh
 
 host = ENV['TARGET_HOST']
 
+# Because we want to launch a Vagrant VM from the Packer image we just built, we
+# need to specify a different Vagrantfile.
+ENV['VAGRANT_VAGRANTFILE'] = 'Vagrantfile.testing'
+ENV['VAGRANT_CWD'] = File.join(Dir.pwd, 'spec')
+
 puts "Running 'vagrant up' for '#{host}'..."
 
 start_time = Time.now
@@ -26,25 +31,6 @@ end
 
 puts "'vagrant up' complete (took #{end_time - start_time}) seconds"
 
-
-puts "Running 'vagrant provision' for '#{host}'..."
-
-start_time = Time.now
-output = `vagrant provision #{host}`
-end_time = Time.now
-
-unless $?.success?
-  puts "There was a problem while running 'vagrant provision'!"
-
-  puts '--------vagrant output------------'
-  puts output
-  puts '----------------------------------'
-  exit 1
-end
-
-puts "'vagrant provision' complete (took #{end_time - start_time}) seconds"
-
-
 config = Tempfile.new('', Dir.tmpdir)
 config.write(`vagrant ssh-config #{host}`)
 config.close
@@ -54,3 +40,9 @@ options = Net::SSH::Config.for(host, [config.path])
 options[:user] ||= 'vagrant'
 set :host, options[:host_name] || host
 set :ssh_options, options
+
+RSpec.configure do |config|
+  config.after(:suite) do
+    `vagrant destroy -f #{host}`
+  end
+end

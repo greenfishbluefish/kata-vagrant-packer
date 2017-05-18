@@ -1,0 +1,81 @@
+#!/bin/bash
+
+# These set -e (exit 1 on error) and -u (exit 1 on uninitialized variable)
+set -eu
+
+# This is the proper way of getting the filename of this file. $0 is unsafe
+# because it stores how this script was invoked. That is usually the filename,
+# but doesn't have to be. q.v. http://stackoverflow.com/a/35006505/1732954 for
+# more discussion on the topic.
+ME=${BASH_SOURCE[0]}
+
+# This is one way of getting the root directory of the Git repository. This will
+# work regardless of where this script is invoked from. It only assumes that we
+# know where this file is located relative to the root directory of the Git
+# repository. This method does not handle symbolic links, but is otherwise
+# usually safe. See http://stackoverflow.com/a/246128/1732954 for a completely
+# safe version.
+unset CDPATH # This is important because CDPATH can trip you up.
+ROOT_DIR=$(cd $(dirname $ME)/../../.. && pwd)
+
+# This is another way of getting the root directory of the Git repository. Don't
+# use this method because it assumes this script is invoked from a directory
+# within this repository. It will throw an error if this script is invoked
+# outside of any Git repository. Worse, it will return the *wrong* directory if
+# this script is invoked from within another Git repository.
+#ROOT_DIR=$(git rev-parse --show-toplevel)
+
+# Always issue commands from and work within a known place.
+cd ${ROOT_DIR}
+
+# 1. Ensure Packer is installed. If not, then throw an error and refer the user
+# to the README.md file in the root directory of the Git repository.
+if ! which packer &>/dev/null; then
+  >&2 echo "Please install Packer per the README.md in ${ROOT_DIR}"
+  exit 1
+fi
+
+# 2. Figure out where VAGRANT_HOME is. This is where the Vagrant box file with
+# the .ovf file we're looking for is stored. The user *could* override this with
+# the VAGRANT_HOME envvar. The default is the value specified.
+vagrant_home=${VAGRANT_HOME:-$HOME/.vagrant.d}
+
+# TODO: Do we want to check to ensure that $vagrant_home is an absolute path?
+
+# 3. Find the .ovf file for the Ubuntu file.
+
+# The OVF file from the Vagrant box for Xenial64 (Ubuntu 16.04) does not work
+# with Packer. This is a known issue as of Mar 16, 2017 on
+# https://github.com/hashicorp/packer/issues/869
+#box="ubuntu-VAGRANTSLASH-xenial64"
+
+# Instead, the Trusty64 (Ubuntu 14.04) does work.
+box="ubuntu-VAGRANTSLASH-trusty64"
+
+ovf_path=$(
+  # Search within the boxes for the box name we want for a ovf file
+  find $vagrant_home/boxes/${box} -name '*.ovf' -type f |
+
+  # Sort the results (will be oldest to newest). This is important because a
+  # user may have downloaded multiple versions of the same Vagrant box.
+  sort |
+
+  # Only provide the last one in the sorted list (the newest).
+  tail -n 1
+)
+
+# Even though we have set -eu, the find runs within a subshell. If the find
+# errors out because it cannot find anything, it will thrown a visible error,
+# but that error will not stop this script. So, we validate that we have what
+# we expect to have moving forward.
+if [[ -z $ovf_path && ! -f $ovf_path ]]; then
+  >&2 echo "Please run 'vagrant up' first to pull the Vagrant box."
+  exit 1
+fi
+
+# 4. Run Packer providing the ovf_path as a value
+# The resulting file will be packer_virtualbox-ovf_virtualbox.box
+
+packer build \
+  -var "ovf_path=${ovf_path}" \
+    "${ROOT_DIR}/devops/packaging/packer.json"
